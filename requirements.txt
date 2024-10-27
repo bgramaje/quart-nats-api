@@ -16,5 +16,8 @@ priority==2.0.0
 pymongo==4.10.1
 python-dotenv==1.0.1
 Quart==0.19.6
+quart-cors==0.7.0
+quart-uploads==0.0.4
+types-aiofiles==24.1.0.20240626
 Werkzeug==3.0.4
 wsproto==1.2.0

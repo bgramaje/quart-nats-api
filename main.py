@@ -2,6 +2,11 @@ from quart import Quart, render_template, websocket, request, jsonify
 from nats.aio.client import Client as NATS
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from quart_uploads import UploadSet
+from werkzeug.utils import secure_filename
+from quart_cors import cors
+from quart_uploads import UploadSet, configure_uploads, UploadNotAllowed
+
 import gridfs
 
 import os
@@ -9,15 +14,20 @@ import uuid
 import json
 
 load_dotenv()
+media = UploadSet('uploads', ('mp4', "mov", "avi", ), default_dest=lambda app: 'uploads') # Create an upload set that only allow mp4 file
 
 app = Quart(__name__)
+app = cors(app, allow_origin="*")
 nc = NATS()
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
+configure_uploads(app, media)
 
 
 # MongoDB connection
 client = MongoClient('mongodb://localhost:27017/')  # Replace with your MongoDB URI
 db = client['subsync']  # Replace with your database name
 fs = gridfs.GridFS(db)
+
 
 
 async def initialize_nats():
@@ -77,20 +87,22 @@ async def create_job():
 @app.route('/job/<job_id>/upload', methods=['POST'])
 async def upload_video(job_id):
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "No file provided"}), 400
+        files = await request.files
 
-        file = request.files['file']
+        if 'file' not in files:
+            return jsonify({"error": "No file provided"}), 400
         
-        # Validate file type (optional)
+        file = files['file']
+
         if not file.filename.endswith(('.mp4', '.mov', '.avi')):
             return jsonify({"error": "File type not supported"}), 400
-
-        # Store the video in GridFS
-        video_id = fs.put(file.stream, filename=file.filename)
-
-        return jsonify({"message": "Video uploaded successfully", "job_id": job_id, "video_id": str(video_id)}), 201
+        # securo the filename to prevent some kinds of attack
+        filename = secure_filename(file.filename) 
+        path = await media.save(file, name=filename)
+        print(path)
+        return jsonify({"message": "Video uploaded successfully", "job_id": job_id, "video_id": str(filename)}), 201
     except Exception as e:
+        print(e)
         return {'error': str(e)}, 500
     
 
